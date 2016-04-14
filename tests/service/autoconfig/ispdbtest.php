@@ -26,7 +26,24 @@ use PHPUnit_Framework_TestCase;
 
 class IspDbtest extends PHPUnit_Framework_TestCase {
 
-	private $ispDb;
+	/**
+	 * Call protected/private method of a class.
+	 *
+	 * @param object &$object    Instantiated object that we will run method on.
+	 * @param string $methodName Method name to call
+	 * @param array  $parameters Array of parameters to pass into method.
+	 *
+	 * @return mixed Method return.
+	 */
+	private function invokeMethod(&$object, $methodName, array $parameters = array())
+	{
+		// Source: https://jtreminio.com/2013/03/unit-testing-tutorial-part-3-testing-protected-private-methods-coverage-reports-and-crap/
+		$reflection = new \ReflectionClass(get_class($object));
+		$method = $reflection->getMethod($methodName);
+		$method->setAccessible(true);
+
+		return $method->invokeArgs($object, $parameters);
+	}
 
 	protected function setUp() {
 		parent::setUp();
@@ -34,33 +51,31 @@ class IspDbtest extends PHPUnit_Framework_TestCase {
 		$logger = $this->getMockBuilder('\OCA\Mail\Service\Logger')
 			->disableOriginalConstructor()
 			->getMock();
-		$this->ispDb = new IspDb($logger);
 	}
 
-	public function queryData() {
-		return [
-		    ['gmail.com'],
-		    ['outlook.com'],
-		    ['yahoo.de'],
-		];
+
+	public function testQueryUrl() {
+		$ispDb = new IspDb($this->logger);
+		$url = dirname(__FILE__) . '/../../resources/autoconfig-freenet.xml';
+		$expected = [] //TODO: fill this with the expected data
+		$result = $this->invokeMethod($ispDb, 'queryUrl', $url);
+		$this->assertEquals($expected, $result);
 	}
 
-	/**
-	 * @dataProvider queryData
-	 *
-	 * @param string $domain
-	 */
-	public function testQueryGmail($domain) {
-		$result = $this->ispDb->query($domain);
+	public function testQuery() {
+		$ispDb = $this->getMockBuilder('\OCA\Mail\Service\AutoConfig\IspDb')
+			->setMethods(array('queryUrl'))
+			->getMock();
 
-		$this->assertContainsIspData($result);
-	}
+		$ispDb->expects($this->exactly(3))
+			->method('queryUrl')
+			->withConsecutive(
+				array('https://autoconfig.example.org/mail/config-v1.1.xml'),
+				array('https://example.org/.well-known/autoconfig/mail/config-v1.1.xml'),
+				array('https://autoconfig.thunderbird.net/v1.1/example.org'),
+			);
 
-	private function assertContainsIspData($data) {
-		$this->assertArrayHasKey('imap', $data);
-		$this->assertTrue(count($data['imap']) >= 1, 'no isp imap data returned');
-		$this->assertArrayHasKey('smtp', $data);
-		$this->assertTrue(count($data['smtp']) >= 1, 'no isp smtp data returned');
+		$ispDb->query('example.org', false); //TODO: test tryMx = true
 	}
 
 }
